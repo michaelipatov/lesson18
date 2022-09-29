@@ -24,106 +24,47 @@
 # Также задание содержит упрощенный вариант сериализации/десериализации
 # которым мы пользуемся только в учебных целях для сокращения объема кода.
 
-from flask import Flask, request
-from flask_restx import Api, Resource
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask
+from flask_restx import Api
+from models import Book, Author
+from setup_db import db
+from views.authors import author_ns
+from views.books import book_ns
 
 
-app = Flask(__name__)
-app.url_map.strict_slashes = False
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
-
-api = Api(app)
-book_ns = api.namespace('books')
-author_ns = api.namespace('authors')
-
-class Book(db.Model):
-    __tablename__ = 'book'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    author = db.Column(db.String(100))
-    year = db.Column(db.Integer)
+def create_app():
+    app = Flask(__name__)
+    app.url_map.strict_slashes = False
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    register_extensions(app)
+    return app
 
 
-class Author(db.Model):
-    __tablename__ = 'author'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    age = db.Column(db.Integer)
-
-db.create_all()
-a1 = Author(id=1, name="Джоан Роулинг", age=1965)          # Формируем тестовую базу данных
-a2 = Author(id=2, name="Александр Дюма", age=1802)         # для того чтобы можно было 
-b1 = Book(id=1, name="Гарри Поттер и Тайная Комната",      # самостоятельно проверить 
-          author="Джоан Роулинг", year=1990)               # работу эндпоинтов
-b2 = Book(id=2, name="Граф Монте-Кристо", 
-          author="Александр Дюма", year=1844)
-b3 = Book(id=3, name="Гарри Поттер и Орден Феникса", 
-          author="Джоан Роулинг", year=1993)
-with db.session.begin():
-    db.session.add_all([b1, b2, b3, a1, a2])
+def register_extensions(app):
+    db.init_app(app)
+    api = Api(app)
+    api.add_namespace(book_ns)
+    api.add_namespace(author_ns)
+    create_data(app, db)
 
 
-@book_ns.route('/')
-class BooksView(Resource):
-    def get(self):                            
-        books = Book.query.all()
-        res = []
-        for book in books:                    
-            sm_d = book.__dict__              
-            del sm_d['_sa_instance_state']    
-            res.append(book.__dict__)
-        return res, 200
-
-    def post(self):
-        data = request.json
-        new_book = Book(name=data.get('name'),
-                        author=data.get('author'),
-                        year=data.get('year'))
+def create_data(app, db):
+    with app.app_context():
+        db.create_all()
+        a1 = Author(id=1, name="Джоан Роулинг", age=1965)          # Формируем тестовую базу данных
+        a2 = Author(id=2, name="Александр Дюма", age=1802)         # для того чтобы можно было
+        b1 = Book(id=1, name="Гарри Поттер и Тайная Комната",      # самостоятельно проверить
+                author="Джоан Роулинг", year=1990)                 # работу эндпоинтов
+        b2 = Book(id=2, name="Граф Монте-Кристо",
+                author="Александр Дюма", year=1844)
+        b3 = Book(id=3, name="Гарри Поттер и Орден Феникса",
+                author="Джоан Роулинг", year=1993)
         with db.session.begin():
-            db.session.add(new_book)
-        return "", 201
+            db.session.add_all([b1, b2, b3, a1, a2])
 
 
-@book_ns.route('/<int:bid>')
-class BookView(Resource):
-    def get(self, bid):
-        book = Book.query.get(bid)
-        result = book.__dict__
-        del result['_sa_instance_state']
-        return result, 200
-
-
-@author_ns.route('/')
-class AuthorsView(Resource):
-    def get(self):
-        authors = Author.query.all()
-        result = []
-        for s in authors:
-            instance = s.__dict__
-            del instance['_sa_instance_state']
-            result.append(instance)
-        return result, 200
-
-    def post(self):
-        data = request.json
-        new_author = Author(name=data.get('name'),
-                            age=data.get('age'))
-        with db.session.begin():
-            db.session.add(new_author)
-        return "", 201
-
-
-@author_ns.route('/<int:aid>')
-class AuthorView(Resource):
-    def get(self, aid):
-        author = Author.query.get_or_404(aid)
-        res = author.__dict__
-        del res['_sa_instance_state']
-        return res, 200
-
+app = create_app()
 
 if __name__ == '__main__':
     app.run(host="localhost", port=10001, debug=True)
